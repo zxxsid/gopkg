@@ -15,26 +15,33 @@ import (
 	"golang.org/x/image/tiff"
 )
 
-// EncodeOptions controls encoding parameters
+// EncodeOptions 编码选项，用于控制图片编码时的参数
 type EncodeOptions struct {
-	Quality int
+	Quality int // JPEG 编码质量，取值范围 1-100，值越大质量越高、文件越大
 }
 
-// EncodeOption is a functional option for encoding
+// EncodeOption 编码选项的函数式参数类型，采用 functional options 模式，
+// 使用者可以通过链式调用灵活组合编码参数
 type EncodeOption func(*EncodeOptions)
 
-// Quality sets the JPEG encoding quality (1-100, default 85)
+// Quality 创建一个设置 JPEG 编码质量的选项。
+// 参数 q 的取值范围为 1-100，默认值为 85。
+// 仅在编码为 JPEG 格式时有效，其他格式会忽略此选项。
 func Quality(q int) EncodeOption {
 	return func(opts *EncodeOptions) {
 		opts.Quality = q
 	}
 }
 
+// defaultEncodeOptions 返回默认的编码选项，JPEG 质量默认为 85
 func defaultEncodeOptions() *EncodeOptions {
 	return &EncodeOptions{Quality: 85}
 }
 
-// Encode writes the image to w in the specified format
+// Encode 将图片编码为指定格式并写入 io.Writer。
+// 支持的格式包括：jpeg/jpg、png、gif、bmp、tiff。
+// 可以通过 opts 参数指定编码选项（如 JPEG 质量）。
+// WebP 格式仅支持解码不支持编码，传入 webp 会返回错误。
 func (i *Image) Encode(w io.Writer, format string, opts ...EncodeOption) error {
 	o := defaultEncodeOptions()
 	for _, opt := range opts {
@@ -54,15 +61,18 @@ func (i *Image) Encode(w io.Writer, format string, opts ...EncodeOption) error {
 	case FormatTIFF:
 		return tiff.Encode(w, i.img, nil)
 	default:
-		return fmt.Errorf("unsupported encoding format: %s", format)
+		return fmt.Errorf("不支持的编码格式: %s", format)
 	}
 }
 
-// Save encodes the image and writes it to a file, format is inferred from the file extension
+// Save 将图片保存到指定路径的文件中。
+// 编码格式根据文件扩展名自动推断（如 .jpg → JPEG，.png → PNG）。
+// 支持的扩展名：.jpg/.jpeg/.png/.gif/.bmp/.tiff/.tif
+// 可以通过 opts 参数指定编码选项（如 Quality(90) 设置 JPEG 质量）。
 func (i *Image) Save(path string, opts ...EncodeOption) error {
 	format := formatFromPath(path)
 	if format == "" {
-		return fmt.Errorf("cannot determine format from file extension: %s", path)
+		return fmt.Errorf("无法从文件扩展名推断格式: %s", path)
 	}
 
 	f, err := os.Create(path)
@@ -73,7 +83,9 @@ func (i *Image) Save(path string, opts ...EncodeOption) error {
 	return i.Encode(f, format, opts...)
 }
 
-// ToBytes encodes the image to a byte slice in the specified format
+// ToBytes 将图片编码为指定格式的字节切片。
+// 适用于需要将图片数据存储到内存、数据库或通过网络传输的场景。
+// 内部使用 bytes.Buffer 缓存编码数据后返回字节切片。
 func (i *Image) ToBytes(format string, opts ...EncodeOption) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := i.Encode(&buf, format, opts...); err != nil {
@@ -82,6 +94,8 @@ func (i *Image) ToBytes(format string, opts ...EncodeOption) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// formatFromPath 根据文件路径的扩展名推断图片格式。
+// 返回对应的格式常量字符串，如果扩展名无法识别则返回空字符串。
 func formatFromPath(path string) string {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
